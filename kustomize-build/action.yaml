@@ -1,0 +1,129 @@
+name: Kustomize build
+
+description: "Builds kustomize overlays from different git refs"
+
+inputs:
+  target_ref:
+    description: "The source git ref to diff with (usually the default branch)"
+    required: true
+    default: "main"
+  source_ref:
+    description: "The source git ref to build from (usually the branch name of the pull request)"
+    required: false
+  kustomize_overlay_paths:
+    required: true
+    default: "deploy/dev,deploy/prod"
+    description: "List of kustomize overlay paths to build (comma separated). Example: deploy/dev,deploy/prod."
+  install_kustomize:
+    description: "Whether to install kustomize or not"
+    required: false
+    default: "true"
+  kustomize_version:
+    description: "The version of kustomize to install"
+    required: false
+    default: "5.0.3"
+
+outputs:
+  kustomize_diff:
+    description: "The diff of the kustomize manifests"
+    value: ${{ steps.kustomize-diff.outputs.kustomize_diff }}
+
+runs:
+  using: "composite"
+  steps:
+    - if: ${{ inputs.install_kustomize == 'true' }}
+      shell: bash
+      run: |
+        echo "Installing kustomize v${{ inputs.kustomize_version }}..."
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/kustomize/v${{ inputs.kustomize_version }}/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/kustomize
+        sudo chmod +x /usr/local/bin/kustomize
+        kustomize version
+
+    - id: render-manifests-from-target-ref
+      env:
+        SSH_AUTH_SOCK: ${{ env.SSH_AUTH_SOCK }}
+      shell: bash
+      run: |
+        git fetch origin ${{ inputs.target_ref }}:${{ inputs.target_ref }}
+        git checkout ${{ inputs.target_ref }}
+
+        # Set the rendered file name to the branch name.
+        # Because the branch name can include "/" character, 
+        #   we need to replace it with "-" to avoid creating additional directories.
+        # And set output for this file name so it can be used in the next step.
+        RENDERED_FILE_NAME="${{ inputs.target_ref }}.yaml"
+        RENDERED_FILE_NAME="${RENDERED_FILE_NAME//\//-}"
+        echo "rendered_file_name=$RENDERED_FILE_NAME" >>$GITHUB_OUTPUT
+
+        # Loop through each kustomize overlay path and generate manifests
+        for overlay in $(echo ${{ inputs.kustomize_overlay_paths }} | tr "," " "); do
+          echo "Generating: $overlay/rendered/$RENDERED_FILE_NAME"
+
+          mkdir -p $overlay/rendered
+          touch $overlay/rendered/$RENDERED_FILE_NAME
+
+          # Generate manifests from kustomize overlay path.
+          # The "|| true" part is to avoid failing the job when the kustomize overlay path is not initialized yet.
+          kustomize build $overlay/ > $overlay/rendered/$RENDERED_FILE_NAME || true
+        done
+
+    - id: render-manifests-from-source-ref
+      env:
+        SSH_AUTH_SOCK: ${{ env.SSH_AUTH_SOCK }}
+      shell: bash
+      run: |
+        # If source_ref input exists, checkout to that ref.
+        # Otherwise, stay on the current branch.
+        if [ -n "${{ inputs.source_ref }}" ]; then
+          git checkout ${{ inputs.source_ref }}
+          RENDERED_FILE_NAME="${{ inputs.source_ref }}.yaml"
+        else
+          RENDERED_FILE_NAME="${{ github.run_id }}.yaml"
+        fi
+
+        # Because the branch name can include "/" character, 
+        #   we need to replace it with "-" to avoid creating additional directories.
+        # And set output for this file name so it can be used in the next step.
+        RENDERED_FILE_NAME="${RENDERED_FILE_NAME//\//-}"
+        echo "rendered_file_name=$RENDERED_FILE_NAME" >>$GITHUB_OUTPUT
+
+        # Loop through each kustomize overlay path and generate manifests
+        for overlay in $(echo ${{ inputs.kustomize_overlay_paths }} | tr "," " "); do
+          echo "Generating: $overlay/rendered/$RENDERED_FILE_NAME"
+
+          kustomize build $overlay/ > $overlay/rendered/$RENDERED_FILE_NAME
+        done
+
+    - id: kustomize-diff
+      shell: bash
+      run: |
+        OUTPUT=""
+
+        RENDERED_FILE_NAME_FROM_DEFAULT_BRANCH=${{ steps.render-manifests-from-target-ref.outputs.rendered_file_name }}
+        RENDERED_FILE_NAME_FROM_PR=${{ steps.render-manifests-from-source-ref.outputs.rendered_file_name }}
+
+        # Loop through each kustomize overlay path and diff manifests
+        for overlay in $(echo ${{ inputs.kustomize_overlay_paths }} | tr "," " "); do
+          DIFF_OUTPUT="$(diff -u $overlay/rendered/$RENDERED_FILE_NAME_FROM_DEFAULT_BRANCH $overlay/rendered/$RENDERED_FILE_NAME_FROM_PR || :)"
+
+          if [ -n "$DIFF_OUTPUT" ]; then
+            if [ -n "$DIFF_OUTPUT" ]; then
+            OUTPUT=$(cat << EOF
+        $OUTPUT
+        ## $overlay
+        \`\`\`diff
+        $DIFF_OUTPUT
+        \`\`\`
+        EOF
+        )
+          fi
+
+          mv $overlay/rendered/$RENDERED_FILE_NAME_FROM_PR $overlay/rendered/rendered.yaml
+          rm $overlay/rendered/$RENDERED_FILE_NAME_FROM_DEFAULT_BRANCH
+        done
+
+        EOF=$(openssl rand -hex 8)
+        echo "kustomize_diff<<$EOF" >>$GITHUB_OUTPUT
+        echo "$OUTPUT" >>$GITHUB_OUTPUT
+        echo "$EOF" >>$GITHUB_OUTPUT
