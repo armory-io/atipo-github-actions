@@ -108,7 +108,6 @@ runs:
           DIFF_OUTPUT="$(diff -u $overlay/rendered/$RENDERED_FILE_NAME_FROM_DEFAULT_BRANCH $overlay/rendered/$RENDERED_FILE_NAME_FROM_PR || :)"
 
           if [ -n "$DIFF_OUTPUT" ]; then
-            if [ -n "$DIFF_OUTPUT" ]; then
             OUTPUT=$(cat << EOF
         $OUTPUT
         ## $overlay
