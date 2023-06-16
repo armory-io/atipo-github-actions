@@ -42,6 +42,7 @@ runs:
         curl -O "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
         sudo chmod +x ./install_kustomize.sh
         ./install_kustomize.sh ${{ inputs.kustomize_version }}
+        rm ./install_kustomize.sh
         sudo mv kustomize /usr/local/bin/kustomize
         sudo chmod +x /usr/local/bin/kustomize
         kustomize version
