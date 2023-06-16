@@ -39,7 +39,9 @@ runs:
       shell: bash
       run: |
         echo "Installing kustomize v${{ inputs.kustomize_version }}..."
-        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/kustomize/v${{ inputs.kustomize_version }}/hack/install_kustomize.sh" | bash
+        curl -o "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/kustomize/v${{ inputs.kustomize_version }}/hack/install_kustomize.sh"
+        sudo chmod +x ./install_kustomize.sh
+        ./install_kustomize.sh ${{ inputs.kustomize_version }}
         sudo mv kustomize /usr/local/bin/kustomize
         sudo chmod +x /usr/local/bin/kustomize
         kustomize version
