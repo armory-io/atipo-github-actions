@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "kustomize-build/**/*.ya?ml"
+      - ".github/workflows/test-kustomize-build.yml"
 
 env:
   PR_REF: ${{ github.event.pull_request.head.ref }}

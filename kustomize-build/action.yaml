@@ -129,7 +129,10 @@ runs:
           rm $overlay/rendered/$RENDERED_FILE_NAME_FROM_DEFAULT_BRANCH
         done
 
-        EOF=$(openssl rand -hex 8)
-        echo "kustomize_diff<<$EOF" >>$GITHUB_OUTPUT
-        echo "$OUTPUT" >>$GITHUB_OUTPUT
-        echo "$EOF" >>$GITHUB_OUTPUT
+        # If OUTPUT is not empty
+        if [ -n "$OUTPUT" ]; then
+          EOF=$(openssl rand -hex 8)
+          echo "kustomize_diff<<$EOF" >>$GITHUB_OUTPUT
+          echo "$OUTPUT" >>$GITHUB_OUTPUT
+          echo "$EOF" >>$GITHUB_OUTPUT
+        fi
