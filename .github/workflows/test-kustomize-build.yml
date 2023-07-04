@@ -1,4 +1,4 @@
-name: Run tests
+name: Run kustomize-build tests
 
 on:
   pull_request:

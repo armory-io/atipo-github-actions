@@ -1,0 +1,47 @@
+name: Run release-versions tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "release-versions/**/*.ya?ml"
+      - ".github/workflows/test-release-versions.yml"
+
+jobs:
+  release_versions:
+    name: Get all release versions
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get all stable release versions
+        id: stable-versions
+        uses: ./release-versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          target_repo: "hashicorp/terraform"
+          from_version: "0.12.0"
+          exclude_prereleases: true
+          exclude_rc: true
+
+      - name: Print all stable versions
+        run: |
+          echo "${{ steps.stable-versions.outputs.versions }}"
+
+      - name: Get all release versions
+        id: all-versions
+        uses: ./release-versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          target_repo: "hashicorp/terraform"
+          from_version: "0.12.0"
+          exclude_prereleases: false
+          exclude_rc: false
+
+      - name: Print all versions
+        run: |
+          echo "${{ steps.all-versions.outputs.versions }}"
