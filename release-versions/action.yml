@@ -1,0 +1,71 @@
+name: Get release versions
+
+description: "This action gets all release versions from a GitHub repository."
+
+inputs:
+  target_repo:
+    description: "The target repository to get the release versions from (without the url). E.g. hashicorp/terraform"
+    required: true
+  from_version:
+    description: "The version to start from. If not set, all versions will be returned."
+    required: false
+  exclude_prereleases:
+    description: "If true, pre-releases will be excluded. Default: true"
+    required: false
+    default: "true"
+  exclude_rc:
+    description: "If true, release candidates will be excluded. Default: true"
+    required: false
+    default: "true"
+
+outputs:
+  versions:
+    description: "The versions"
+    value: ${{ steps.get-release-versions.outputs.versions }}
+
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        # If 'gh' is already installed, skip installation
+        if command -v gh &>/dev/null; then
+          echo "gh is already installed"
+          exit 0
+        fi
+
+        # Install gh cli
+        curl -sL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+        sudo apt update
+        sudo apt install gh
+      shell: bash
+
+    - id: get-release-versions
+      run: |
+        # Get all terraform versions using GitHub API
+        VERSIONS=$(gh api repos/hashicorp/terraform/releases --jq '.[].tag_name' --paginate)
+
+        # If pre-releases should be excluded, remove them
+        if [ "${{ inputs.exclude_prereleases }}" = "true" ]; then
+          VERSIONS=$(echo "$VERSIONS" | grep -v -E 'alpha|beta')
+        fi
+
+        # If release candidates should be excluded, remove them
+        if [ "${{ inputs.exclude_rc }}" = "true" ]; then
+          VERSIONS=$(echo "$VERSIONS" | grep -v -E 'rc')
+        fi
+
+        # Remove quotes and "v" from versions
+        VERSIONS=$(echo "$VERSIONS" | sed 's/"//g' | sed 's/v//g' | sort -uV)
+
+        # Filter versions from a specific version
+        VERSIONS=$(echo "$VERSIONS" | sed -n "/${{ inputs.from_version }}/,\$p")
+
+        # Set output
+        if [ -n "$VERSIONS" ]; then
+          EOF=$(openssl rand -hex 8)
+          echo "versions<<$EOF" >>$GITHUB_OUTPUT
+          echo "$VERSIONS" >>$GITHUB_OUTPUT
+          echo "$EOF" >>$GITHUB_OUTPUT
+        fi
+      shell: bash
